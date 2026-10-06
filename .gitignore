@@ -1,0 +1,10 @@
+# Python
+__pycache__
+
+# Env
+venv
+
+# Test
+output
+subcell_location_Nucleoli.tsv
+
