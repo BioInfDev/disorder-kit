@@ -6,7 +6,7 @@ import requests
 
 def get_pLDDT(uid: str) -> list:
     '''
-    Download per-residue pLDDT from AlphaFold.
+    Download pLDDT from AlphaFold.
     '''
     url = f'https://alphafold.ebi.ac.uk/files/AF-{uid}-F1-confidence_v6.json'
     response = requests.get(url = url)

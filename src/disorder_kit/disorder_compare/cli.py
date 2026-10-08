@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import Annotated
 import json
@@ -19,14 +18,20 @@ def compare(tsv: Annotated[Path, typer.Argument(exists = True, dir_okay = False,
             output: Annotated[Path, typer.Argument(dir_okay = True, help = 'Path to output folder')],
             aiupred_threshold: Annotated[float, typer.Option('-a', '--aiupred-threshold', help = 'AIUPred threshold (disorder if above).')] = 0.5,
             plddt_threshold: Annotated[int, typer.Option('-p', '--plddt-threshold', help = 'pLDDT threshold (disorder if below).')] = 80):
+    output_cache = output / 'cache'
+    output_equal_bins = output / 'equal_bins'
+    output_ordered_moderate_disordered_bins = output / 'ordered_moderate_disordered_bins'    
     if not output.exists():
         output.mkdir(parents = True)
+        output_cache.mkdir()
+        output_equal_bins.mkdir()
+        output_ordered_moderate_disordered_bins.mkdir()
      
-    seqs_json = output / (tsv.stem + '_seqs.json')
-    aiupred_npz = output / (tsv.stem + '_aiupred.npz')
-    aiupred_p_npz = output / (tsv.stem + '_aiupred_p.npz')
-    plddt_npz = output / (tsv.stem + '_plddt.npz') 
-    plddt_vlp_npz = output / (tsv.stem + '_plddt_vlp.npz')
+    seqs_json = output_cache / (tsv.stem + '_seqs.json')
+    aiupred_npz = output_cache / (tsv.stem + '_aiupred.npz')
+    aiupred_p_npz = output_cache / (tsv.stem + '_aiupred_p.npz')
+    plddt_npz = output_cache / (tsv.stem + '_plddt.npz') 
+    plddt_vlp_npz = output_cache / (tsv.stem + '_plddt_vlp.npz')
 
     '''
     Profiler
@@ -99,35 +104,84 @@ def compare(tsv: Annotated[Path, typer.Argument(exists = True, dir_okay = False,
     gene_aiupred_p = {g : gene_aiupred_p[g] * 100  for g in common}
     gene_plddt_vlp = {g : gene_plddt_vlp[g] * 100 for g in common}
 
-    # DataFrame
-    gene, aiupred_col, plddt_col, chm_col, avg_col = 'Gene', f'AIUPred (> {aiupred_threshold})', f'pLDDT (< {plddt_threshold})', 'Counterharmonic mean', 'Average'
-    df = pd.DataFrame({
-        gene: list(gene_aiupred_p),
-        aiupred_col: list(gene_aiupred_p.values()),
-        plddt_col: list(gene_plddt_vlp.values()),
-    })
-    df[chm_col] = (df[aiupred_col] ** 2 + df[plddt_col] ** 2) / (df[aiupred_col] + df[plddt_col])
-    df[avg_col] = (df[aiupred_col] + df[plddt_col])/ 2
+    # Data
+        # Columns
+    GENE_COL = 'Gene'
+    AIUPRED_COL = f'PPIDR-AIUPred (residues with score < {aiupred_threshold} were considered disordered)'
+    PLDDT_COL = f'PPIDR-pLDDT (residues with score < {plddt_threshold} were considered disordered)'
+    CHM_COL = 'Contraharmonic mean between PPIDR-AIUpred and PPIDR-pLDDT'
+    AVG_COL = 'Average between PPIDR-AIUpred and PPIDR-pLDDT'
 
-    highlight = core.highlight(tsv)
-    df_highlight = df[df['Gene'].isin(highlight)]
+    PREDICTOR_COLS = (AIUPRED_COL, PLDDT_COL)
+    AGGREGATE_COLS = (AVG_COL, CHM_COL)
+    PPIDR_COLS = PREDICTOR_COLS + AGGREGATE_COLS
+    ALL_COLLS = (GENE_COL, ) + PPIDR_COLS
+
+        # DataFrame 
+    df = pd.DataFrame()
+    df[GENE_COL] = list(gene_aiupred_p)
+    df[AIUPRED_COL] = list(gene_aiupred_p.values())
+    df[PLDDT_COL] = list(gene_plddt_vlp.values())
+    df[CHM_COL] = (df[AIUPRED_COL] ** 2 + df[PLDDT_COL] ** 2) / (df[AIUPRED_COL] + df[PLDDT_COL])
+    df[AVG_COL] = (df[AIUPRED_COL] + df[PLDDT_COL])/ 2
+
+    df['PR_AIUPRED'] = df[AIUPRED_COL].rank(pct = True, method = 'max') * 100
+    df['PR_PLDDT_COL'] = df[PLDDT_COL].rank(pct = True, method = 'max') * 100
+    df['PR_AVG_COL'] = df[AVG_COL].rank(pct = True, method = 'max') * 100
+    df['PR_CHM_COL'] = df[CHM_COL].rank(pct = True, method = 'max') * 100
     
-    # Bins
-    labels = ['0–20%', '20–40%', '40–60%', '60–80%', '80–100%']
-    bins_aiupred_disorder = pd.cut(df[aiupred_col], bins = [0, 20, 40, 60, 80, 100], labels = labels, include_lowest = True)
-    bins_plddtp_disorder = pd.cut(df[plddt_col], bins = [0, 20, 40, 60, 80, 100], labels = labels, include_lowest = True)
-    bins_chm_disorder = pd.cut(df[chm_col], bins = [0, 20, 40, 60, 80, 100], labels = labels, include_lowest = True)
-    bins_avg_disorder = pd.cut(df[avg_col], bins = [0, 20, 40, 60, 80, 100], labels = labels, include_lowest = True)
+        # Highlight DataFrame
+    highlight = core.highlight(tsv)
+    targets = df[df['Gene'].isin(highlight)]
 
-    # Bar plots
-    figure.bar_disorder_distribution(bins_aiupred_disorder, f'AIUPred (> {aiupred_threshold})')
-    figure.bar_disorder_distribution(bins_plddtp_disorder, f'pLDDT (< {plddt_threshold})')
-    figure.bar_disorder_distribution(bins_chm_disorder, 'Counterharmonic mean (pLDDT, AIUPred)')  
-    figure.bar_disorder_distribution(bins_avg_disorder, 'Average (pLDDT, AIUPred)')  
+        # Save
+    df.to_csv(output / 'summary.csv', index = False)
+    targets.to_csv(output / 'targets_summary.csv', index = False)
 
-    # Scatter
-    figure.scatter_disorder_distribution(df, df_highlight, bins_chm_disorder)
-    figure.scatter_disorder_distribution(df, df_highlight, bins_avg_disorder)
+    # Correlation PPIDR-AIUPred and PPIDR-pLDDT
+    corrs = core.corr(list(gene_aiupred_p.values()), list(gene_plddt_vlp.values()))
+    corrs_df = pd.DataFrame(corrs)
+    corrs_df.to_csv(output / 'corrs.csv', index = False)
+
+    # Binning
+    BINNING_SCHEMA = {
+        'EQUAL': {
+            'bins' : [0, 20, 40, 60, 80, 100],
+            'labels': ['0-20% disorder', '20-40% disorder', '40-60% disorder', '60-80% disorder', '80-100% disorder'],
+            'bar_colors': ["#2B5375", "#A8BEDC", "#C6B4D8", "#E8B4C0", "#E18181"],
+            'scatter_colors': ["#2B5375", "#A8BEDC", "#409151", "#E8B4C0", "#EB3B3B"],
+            'output': output_equal_bins
+        },
+        'ORDERED_MODERATE_DISORDERED': {
+            'bins': [0, 10, 30, 100],
+            'labels': ['Structured proteins (< 10% disorder)', 'Moderately disordered proteins (20–40% disorder)', 'Highly disordered proteins (> 30% disorder)'],
+            'bar_colors': ["#2B5375", "#A8BEDC", "#E18181"],
+            'scatter_colors': ["#2B5375", "#789AD1", "#EB3B3B"],
+            'output': output_ordered_moderate_disordered_bins
+        }
+    }
+
+    for schema in BINNING_SCHEMA.values():
+        # Bar plot
+        for col in PPIDR_COLS:
+            bins = pd.cut(df[col], bins = schema['bins'], labels = schema['labels'], right = False, include_lowest = True)
+            fig = figure.bar_disorder_distribution(bins, schema['bar_colors'],col)
+            fig.write_html(schema['output'] / f'BAR_{col}.html')
+
+        # Scatter plot
+        for col in AGGREGATE_COLS:
+            bins = pd.cut(df[col], bins = schema['bins'], labels = schema['labels'], include_lowest = True)
+            bins = bins.cat.set_categories(schema['labels'], ordered=True)
+            fig = figure.scatter_disorder_distribution(df, AIUPRED_COL, PLDDT_COL, bins, schema['scatter_colors'], col, targets, ALL_COLLS)
+            fig.write_html(schema['output'] / f'SCATTER_{col}.html')
+
+        # Interceptions
+        compare_bins = []
+        for col in AGGREGATE_COLS:
+            bins = pd.cut(df[col], bins = schema['bins'], labels = schema['labels'], include_lowest = True)
+            compare_bins.append(bins)
+        fig = figure.sankey_distribution_compare(compare_bins, AGGREGATE_COLS)
+        fig.write_html(schema['output'] / f'SANKEY.html')
 
 if __name__ == '__main__':
     app()

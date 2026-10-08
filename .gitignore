@@ -1,10 +1,15 @@
 # Python
-__pycache__
+__pycache__/
 
 # Env
-venv
+venv/
+
+# Distribution
+build/
+dist/
+*.egg-info/
+.eggs/
 
 # Test
 output
 subcell_location_Nucleoli.tsv
-
