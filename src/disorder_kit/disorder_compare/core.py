@@ -21,10 +21,6 @@ def highlight(tsv: Path):
     tsv = read_csv(tsv, sep = '\t').dropna(subset = ['Gene'])
     return [gene for gene, highlight in zip(tsv['Gene'], tsv['Highlight']) if highlight == '+']
 
-def gene_to_seq(gene_uid: dict) -> dict[str, list]:
-    with typer.progressbar(gene_uid.items(), length = len(gene_uid)) as progress:
-        return {gene: fetcher.get_protein_sequence(uid) for gene, uid in progress}
-
 def gene_to_aiupred(gene_seq: dict) -> dict[str, np.ndarray]:
     predictor = AIUPred()
     with typer.progressbar(gene_seq.items(), length = len(gene_seq)) as progress:

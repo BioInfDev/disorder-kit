@@ -6,6 +6,7 @@ import typer
 import numpy as np
 import pandas as pd
 
+from .. import fetcher
 from . import core
 from . import figure
 
@@ -42,7 +43,7 @@ def compare(tsv: Annotated[Path, typer.Argument(exists = True, dir_okay = False,
 
     if not seqs_json.exists():
         typer.echo('Downloading protein sequences from the UniProt database...')
-        gene_seq = core.gene_to_seq(gene_uid)
+        gene_seq = fetcher.get_protein_sequences(list(gene_uid.values()))
         with open(seqs_json, 'w') as output:
             json.dump(gene_seq, output)
         typer.echo(f'└── Downloaded {len(gene_seq)} protein sequences from UniProt \n')
@@ -100,7 +101,6 @@ def compare(tsv: Annotated[Path, typer.Argument(exists = True, dir_okay = False,
     Figure
     '''
     common = set(gene_aiupred_p) & set(gene_plddt_vlp)
-    
     gene_aiupred_p = {g : gene_aiupred_p[g] * 100  for g in common}
     gene_plddt_vlp = {g : gene_plddt_vlp[g] * 100 for g in common}
 

@@ -49,7 +49,7 @@ def scatter_disorder_distribution(df, x_col, y_col, bins, bin_colors, bins_label
 
     fig.update_traces(
         marker=dict(size=8, line=dict(width=0)),
-        hovertemplate=f"<b>{hover_cols[0]}</b><br>"
+        hovertemplate="<b>%{customdata[0]}</b><br>"
                     f"{hover_cols[1]}: %{{x:.1f}}%<br>"
                     f"{hover_cols[2]}: %{{y:.1f}}%<br>"
                     f"{hover_cols[3]}: %{{customdata[1]:.1f}}"
