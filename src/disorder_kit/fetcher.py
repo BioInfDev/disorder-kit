@@ -1,7 +1,5 @@
-from io import StringIO
 import time
 
-from Bio import SeqIO
 import requests
 
 
@@ -12,8 +10,7 @@ def get_pLDDT(uid: str) -> list:
     url = f'https://alphafold.ebi.ac.uk/files/AF-{uid}-F1-confidence_v6.json'
     response = requests.get(url = url)
 
-    if response.status_code != 200:
-        return None
+    time.sleep(0.5)
     return response.json()['confidenceScore']
     
 def get_protein_sequences(uids: list, chunk_size: int = 500) -> str:
